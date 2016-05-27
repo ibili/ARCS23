@@ -210,8 +210,10 @@ args = '-s %s -i %s -G %s -C %s' % (os.path.join(config['workspace'], 'contig_pa
 command_run(ARCS_CMD, 'copy_num_estimate', args, config)
 
 
-
-
+###############################################
+#
+#only used generate scaffold_parameter
+###############################################
 for i, library in enumerate(config['library_list']):
     print "............ iter %d" % (i + 1)
 
@@ -278,7 +280,7 @@ command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), '
 #
 ###################################################################
 args = '%s %s' % (config['pb'], os.path.join(config['workspace'], 're_pacbio_read.fasta'));
-command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'reversePacBioRead.py'), args, config)
+command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'SPAReversePacBioRead.py'), args, config)
 
 ###################################################################
 #
@@ -286,7 +288,7 @@ command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), '
 #
 ###################################################################
 
-args = '%s %s -out %s -m 0 -nproc %d' % (os.path.join(config['workspace'], 're_pacbio_read.fasta'), os.path.join(config['workspace'], 'contigs.fasta'), os.path.join(config['workspace'], 'blasr_result_0'), 8)
+args = '%s %s -out %s -m 1 -nproc %d' % (os.path.join(config['workspace'], 're_pacbio_read.fasta'), os.path.join(config['workspace'], 'contigs.fasta'), os.path.join(config['workspace'], 'blasrResult'), 8)
 command_run('', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'blasr'), args, config)
 
 ###################################################################
@@ -297,7 +299,7 @@ command_run('', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'blasr'
 
 i = 0
 #print i
-args = '%s %s %s %s %s %s %s' % (os.path.join(config['workspace'], 'contig_len'), os.path.join(config['workspace'], 'component_%d' % i), os.path.join(config['workspace'], 'blasr_result_0'), os.path.join(config['workspace'], 'contig_arc_graph_after_remove_ambigous_arcs_%d' % i), os.path.join(config['workspace'], 'position_lp_%d.math' % i), os.path.join(config['workspace'], 'edge_cluster_len_%d' % i), os.path.join(config['workspace'], 'scaffold_parameter_%d' % (i)))
+args = '%s %s %s %s %s %s %s' % (os.path.join(config['workspace'], 'contig_len'), os.path.join(config['workspace'], 'component_%d' % i), os.path.join(config['workspace'], 'blasrResult'), os.path.join(config['workspace'], 'contig_arc_graph_after_remove_ambigous_arcs_%d' % i), os.path.join(config['workspace'], 'position_lp_%d.math' % i), os.path.join(config['workspace'], 'edge_cluster_len_%d' % i), os.path.join(config['workspace'], 'scaffold_parameter_%d' % (i)))
 command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'tranBlasr2LPAndGraph.py'), args, config)
 
 ###################################################################

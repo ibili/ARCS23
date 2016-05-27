@@ -55,49 +55,55 @@ def read_blasr(f):
     graph = {}
     read2Contigs = {}
     line = f.readline().strip()
+    '''
+    # format -m 0
     print "readId , contigId, contig in read, readStart, readEnd, readLength, contigStart, contigEnd, contigLength, sim, score"
+    '''
     while line:
-        fileEnd = False
-        while line and ( not line.strip().startswith("%sim") ):
-            line = f.readline()
-            if not line:
-                fileEnd = True
-                break
-        if fileEnd:
-            break
-        sim = line.strip().split(" ")[1]
-        line = f.readline();
-        score = int(line.strip().split(" ")[1])
-        line = f.readline().strip()
-        readId = int(line.split("/")[0].split("d")[1].strip())
-        line = f.readline().strip()
-        contigId = int(line.split("_")[1].strip())
-        for i in range(0, 3):
-            f.readline()
-        line = f.readline().strip()
-        readDirection = int(line.split(":")[1].strip()) 
-        line = f.readline().strip()
-        contigDirection = int(line.split(":")[1].strip())
-        if (readDirection !=0 or contigDirection != 0):
+        # format -m 1
+        print line
+        contigId = int(line.split()[1].split("_")[1].strip())
+        readId = int(line.split()[0].split("_")[1].strip())
+        
+        sim = float(line.split()[5].strip())         
+        score = float(line.strip().split()[4])
+        
+        readStart = int(line.split()[9].strip())
+        readEnd   = int(line.split()[10].strip())
+        readLength = int(line.split()[11].strip())
+        
+        contigStart = int(line.split()[6].strip())
+        contigEnd   = int(line.split()[7].strip())
+        contigLength = int(line.split()[1].split("_")[3].strip())
+       
+        assert contigEnd > contigStart
+        mapLength = contigEnd - contigStart
+
+        readDirection = int(line.split()[2].strip()) 
+        contigDirection = int(line.split()[3].strip())
+       
+        #map in single direction
+        if (readDirection != 0 or contigDirection != 0):
             line = f.readline();
-            continue;
-        line = f.readline().strip()
-        readStart = int(line.split()[1].strip())
-        readEnd   = int(line.split()[3].strip())
-        readLength = int(line.split()[5].strip())
-        line = f.readline().strip()
-        contigStart = int(line.split()[1].strip())
-        contigEnd   = int(line.split()[3].strip())
-        contigLength= int(line.split()[5].strip())
-        #print "sim >="
-        #print SIM_CUTOFF  
+            continue
+
+        if (contigId == 0):
+            print "readId, contigId, readDirection, contigDirection, score, sim, contigStart, contigEnd, contigLength, readStart, readEnd, readLength" ,readId, contigId, readDirection, contigDirection, score, sim, contigStart, contigEnd, contigLength, readStart, readEnd, readLength
+        
+        # rule -600 150 85
         if (score > SCORE_CUTOFF or contigLength < EDGE_LENGTH_CUTOFF or sim < SIM_CUTOFF):
             line = f.readline()
             continue
-        #if (readStart > 5 and readLength-readEnd > 5) and ((contigEnd - contigStart) < contigLength * CORVAGE_PERCENT_CUTOFF or contigLength < EDGE_LENGTH_CUTOFF or sim < SIM_CUTOFF):
-        #    line = f.readline()
-        #    continue
-
+        
+        '''
+        shouldLength = mapLength + min(contigStart, readStart) + min(contigLength-contigEnd, readLength-readEnd) 
+        
+        # actual map / should map >  COVRAGE_PERCENT_CUTOFF(0.8)
+        if (mapLength < shouldLength * COVRAGE_PERCENT_CUTOFF):
+            line = f.readline()
+            continue
+        ''' 
+        
         #print "after filter"
         if not read2Contigs.has_key(readId):
             read2Contigs[ readId ] = [];
