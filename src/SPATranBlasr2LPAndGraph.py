@@ -1,81 +1,61 @@
 #!/usr/bin/python
 
 import sys
-EDGE_LENGTH_CUTOFF = 100
-COVRAGE_PERCENT_CUTOFF = 0.9 # to ful, no need change
+EDGE_LENGTH_CUTOFF = 200
+COVRAGE_PERCENT_CUTOFF = 0.97 # to ful, no need change
 #COVER_NUM_CUTOFF = 10
-COVER_NUM_CUTOFF = 3 # to ful, no need change
-SIM_CUTOFF = 85
-SCORE_CUTOFF = 0
+COVER_NUM_CUTOFF = 5 # to ful, no need change
+SIM_CUTOFF = 97
+SCORE_CUTOFF = 1.7
 #SIM_UPPER = 99
 
 
-###pay attention contigsId from 0 or 1
 def read_contigLen(f):
-    contigLen = []
+    contigLen = {}
     line = f.readline().strip()
     while line:
-        contigLen.append( int(line) );
+        cols = line.split()
+        contigLen[int(cols[0])]  =  int(cols[1]);
         line = f.readline().strip()
     return contigLen
 
-def read_component2Contig(f):
-    with file(sys.argv[1] ) as contigFile:
-        contigLen = read_contigLen(contigFile)
-    components = {}
-    line = f.readline().strip()
-    while line:
-        componentId = int(line.split()[1].strip())
-        contigs = f.readline().strip().split()
-        gaps    = f.readline().strip().split()
-        if not components.has_key(componentId):
-            components[ componentId ] = [];
-        components[ componentId ].append( (int(contigs[0]), 0) )
-        last = 0
-        for i in range(1, len(contigs)):
-            cur = last + contigLen[ int(contigs[i-1]) - 1] + gaps[i-1] #in contigs.fasta contigId from 1
-            components[ componentId ].append( (int(contigs[i]), cur) )
-            last = cur
-        line = f.readline().strip()
-    return components
-
 def read_component(f):
-    with file(sys.argv[1] ) as contigFile:
-        contigLen = read_contigLen(contigFile)
+    with file(sys.argv[1] ) as contigLenFile:
+        contigLen = read_contigLen(contigLenFile)
     fout = open(sys.argv[6], "w")
-    #print contigLen
+    print "contigId contigLength"
+    print contigLen
     contigInComp = {}
     line = f.readline().strip()
     componentNum = 0
     while line:
         componentId = int(line.split()[1].strip())
-        componentNum = componentId
+        componentNum = componentNum + 1
         contigs = f.readline().strip().split()
         gaps    = f.readline().strip().split()
         contigInComp[ int(contigs[0]) ] = (componentId, 0)
         last = 0
         for i in range(1, len(contigs)):
-            cur = last + contigLen[ int(contigs[i-1]) - 1 ] + int(gaps[i-1])
+            cur = last + contigLen[ int(contigs[i-1]) ] + int(gaps[i-1])
             contigInComp[ int(contigs[i]) ] = (componentId, cur)
             last = cur
         #print "contigs size, contigLen size",len(contigs), len(contigLen) 
-        fout.write(str(last + contigLen[ int(contigs[ len(contigs)-1 ]) - 1 ]) + "\n")
+        fout.write("%d %d\n" % (componentId , last+contigLen[ int(contigs[ len(contigs)-1 ])]))
         line = f.readline().strip()
     fout = open(sys.argv[7], "w")
-    fout.write("EDGE_CLUSTER_NUM=%d\n" % (componentNum+1))
-    return contigLen, contigInComp, componentNum+1
+    fout.write("EDGE_CLUSTER_NUM=%d\n" % (componentNum))
+    return contigLen, contigInComp, componentNum
     
 def read_blasr(f):
     print "yes1"
     with file( sys.argv[2] ) as componentFile:
         contigLen, contigInComp, componentNum = read_component(componentFile)
+    print "all compenent"
     print contigInComp
-    print componentNum
+    print "component_number =", componentNum
     graph = {}
     read2Contigs = {}
-    line = f.readline().strip()
-    
-    #print "contigId, readId , mapLength, contigStart, contigEnd, contigLength, readStart, readEnd, sim, score"
+    line = f.readline().strip() 
     while line:
         contigId = int(line.split("\t")[0].split("_")[1].strip())
         readId = int(line.split("\t")[1].split("_")[1].strip())
@@ -87,24 +67,25 @@ def read_blasr(f):
         readStart = int(line.split("\t")[8].strip())
         readEnd   = int(line.split("\t")[9].strip())
         readLength = int(line.split("\t")[1].split("_")[2].strip())
-
-
+        
         contigStart = int(line.split("\t")[6].strip())
         contigEnd   = int(line.split("\t")[7].strip())
         contigLength = int(line.split("\t")[0].split("_")[3].strip())
         
         readDirection = readStart < readEnd 
         contigDirection = contigStart < contigEnd
-        
+       
+        #map in single direction
         if (readDirection != 1 or contigDirection != 1):
             line = f.readline();
             continue; 
-        
-        if (score < SCORE_CUTOFF or mapLength < EDGE_LENGTH_CUTOFF or sim < SIM_CUTOFF):
+       
+        # 0 100 85
+        if (score/mapLength < SCORE_CUTOFF or mapLength < EDGE_LENGTH_CUTOFF or sim < SIM_CUTOFF):
             line = f.readline()
             continue
         shouldLength = mapLength + min(contigStart, readStart) + min(contigLength-contigEnd, readLength-readEnd) 
-        # actual map / should map >  COVRAGE_PERCENT_CUTOFF
+        # actual map / should map >  COVRAGE_PERCENT_CUTOFF(0.9)
         if (mapLength < shouldLength * COVRAGE_PERCENT_CUTOFF):
             line = f.readline()
             continue
@@ -133,11 +114,11 @@ def read_blasr(f):
                     key = '%d_%d' % (com_i, com_j)
                     if not graph.has_key(key):
                         graph[key] = (dis, 1) 
-                        print "com_i,com_j,readId,dis,cov:",com_i, com_j, idx, graph[key],graph[key][0]/graph[key][1]
+                        print "contig_i,contig_j,com_i,com_j,readId,dis,cov:",contig_i,contig_j,com_i, com_j, idx, graph[key],graph[key][0]/graph[key][1]
                     else:
                         x, y = graph[key]
-                        graph[key] = (x + dis, y + 1)
-                        print "com_i,com_j,readId,dis,cov:",com_i, com_j, idx, graph[key],graph[key][0]/graph[key][1]
+                        graph[key] = (x + dis, y + 1) 
+                        print "contig_i,contig_j,com_i,com_j,readId,dis,cov:",contig_i,contig_j,com_i, com_j, idx, graph[key],graph[key][0]/graph[key][1]
     eleForDelete = []
     print "before coverage filter",graph 
 
@@ -152,19 +133,11 @@ def read_blasr(f):
         del graph[key]
     print "SPA add edge",len(graph)
     
-    fout = open("subgraph","w")
-    fout.write("digraph {\n")
-    for key in graph:
-        fout.write("%s->%s[label=\"%s\"]\n" % (key.split("_")[0] , key.split("_")[1] , graph[key]))
-        print key,graph[key]
-    fout.write("}")
-
-
 
     return graph, componentNum
 
-if len( sys.argv) != 8:
-    print "Usage: " + sys.argv[0] + " contig_len component_n blasr.out contig_arc_graph_after_remove_ambigous_arcs_n position_lp_n.math edge_cluster_len_n scaffold_parameter_n"
+if len( sys.argv) != 9:
+    print "Usage: " + sys.argv[0] + " contig_len component_n blasr.out contig_arc_graph_after_remove_ambigous_arcs_n position_lp_n.math edge_cluster_len_n scaffold_parameter_n subgraph"
     exit(0)
 
 '''
@@ -186,7 +159,7 @@ print componentNum
 '''
 with file(sys.argv[3]) as f:
     graph, componentNum = read_blasr(f)
-    '''
+    
     #filter degree too larger
     sortedGraphKey = sorted(graph.keys(), key=lambda t:int(t.split("_")[0]))
     #print sortedGraphKey
@@ -214,7 +187,7 @@ with file(sys.argv[3]) as f:
     print comSecond
     comSecondFilter = []
     for ii in comSecond:
-        if comSecond[ii] >= 5:
+        if comSecond[ii] >= 4:
             comSecondFilter.append(ii)
     print comSecondFilter
 
@@ -224,11 +197,19 @@ with file(sys.argv[3]) as f:
             continue
         if (key.split("_")[1] in comFirstFilter) and key.split("_")[1] in comSecondFilter:
             del graph[key]
+    
+    fout = open(sys.argv[8], "w")
+    fout.write("digraph {\n")
+    for key in graph:
+        fout.write("%s->%s[label=\"%s\"]\n" % (key.split("_")[0] , key.split("_")[1] , graph[key][0]))
+        print key,graph[key]
+    fout.write("}")
+    
     #print graph        
     fout = open("copy_num","w")
     for key in graph.keys():
         fout.write(str(graph[key][1]) + "\n")
-    '''
+    
 fout = open(sys.argv[4], "w")
 for key in graph:
     components = key.split("_")

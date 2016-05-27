@@ -179,69 +179,136 @@ if len(config['library_list']) == 0:
     sys.exit(1)
 
 start = datetime.now()
-'''
-###################################################################
-#
-# python reverse Contigs.py
-#
-###################################################################
-
-args = '%s %s' % (os.path.join(config['workspace'], 'contigs.fasta'), os.path.join(config['workspace'], 'reContigs.fasta'));
-command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'SPAReverseContigs.py'), args, config)
-'''
 
 ###################################################################
 #
-# python giveUniqueContigs.py
+# arcs preprocess
 #
 ###################################################################
+args = '-K %d -o %s -e %d' % (config['kmer_size'], os.path.join(config['workspace'], 'kmers.arff'), config['READ_LENGTH_CUTOFF'])
 
-args = '%s %s %s %s' % (os.path.join(config['workspace'], 'reContigs.fasta'), os.path.join(config['workspace'], 'uniqueContig.fasta'), os.path.join(config['workspace'], 'contig_len'),os.path.join(config['workspace'], 'component_0'))
-command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'SPAGetUniqueContig.py'), args, config)
-#python getUniqueContig.py /home/liyanbo/SPAdes_result/F.tul/contigs.fasta /home/liyanbo/SPAdes_result/F.tul/uniqueContig.fasta /home/liyanbo/SPAdes_result/F.tul/contig_len /home/liyanbo/SPAdes_result/F.tul/component_0
+#args = '-K %d -o %s -e -1' % (config['kmer_size'], os.path.join(config['workspace'], 'kmers.arff'))
+if config['kmer_filter'] and config['kmer_size'] < 33:
+    args = '%s -E' % (args)
+args = '%s %s %s' % (args, config['library_list'][0]['q1'], config['library_list'][0]['q2'])
+command_run(ARCS_CMD, 'preprocess', args, config)
+
+###################################################################
+#
+# arcs assemble
+#
+###################################################################
+args = '-d %s -K %d -i %s' % (config['workspace'], config['kmer_size'], os.path.join(config['workspace'], 'kmers.arff'))
+command_run(ARCS_CMD, 'assemble', args, config)
+
+###################################################################
+#
+# arcs copy_num_estimate 
+#
+###################################################################
+args = '-s %s -i %s -G %s -C %s' % (os.path.join(config['workspace'], 'contig_parameter'), os.path.join(config['workspace'], 'condensed_de_bruijn_graph_after_trimming.data'), os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_0')) 
+command_run(ARCS_CMD, 'copy_num_estimate', args, config)
+
+
+
+
+for i, library in enumerate(config['library_list']):
+    print "............ iter %d" % (i + 1)
+
+    if not library.has_key('EDGE_LENGTH_CUTOFF'):
+        if config.has_key('edge_length_cutoff'):
+            library['EDGE_LENGTH_CUTOFF'] = config['edge_length_cutoff']
+        else:
+            library['EDGE_LENGTH_CUTOFF'] = config['kmer_size']
+
+    ###################################################################
+    #
+    # arcs scaffold
+    #
+    ###################################################################
+    args = '-d %s -K %d -C %s -f %s -e %d -1 %s -2 %s -L %d -P %f -i %d -r %d -R %d -p %d' % (config['workspace'], config['kmer_size'], os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_%d' % (i)), library['EDGE_LENGTH_CUTOFF'], library['q1'], library['q2'], library['INSERT_SIZE'], library['LINK_QUALITY_PERCENT'], i, library['PAIR_KMER_CUTOFF'], library['PAIR_READS_CUTOFF'], config['cpu_num'])
+    command_run(ARCS_CMD, 'scaffold', args, config)
+'''    
+        
+    ###################################################################
+    #
+    # arcs solveLP
+    #
+    ###################################################################
+    args = '-s %s -i %s -o %s' % (os.path.join(config['workspace'], 'scaffold_parameter_%d' % (i)), os.path.join(config['workspace'], 'position_lp_%d.math' % (i)), os.path.join(config['workspace'], 'edge_cluster_pos_%d' % (i)))
+    command_run(ARCS_CMD, 'solveLP', args, config)
+
+    ###################################################################
+    #
+    # arcs remove_repeats
+    #
+    ###################################################################
+    args = '-d %s -K %d -O %d -i %d' % (config['workspace'], config['kmer_size'], config['max_overlap'], i)
+    command_run(ARCS_CMD, 'remove_repeats', args, config)
+    
+###################################################################
+#
+# python reverse_filter.py
+#
+###################################################################
+args = '%s %s %s' % (config['workspace'], os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_%d' % len(config['library_list'])))
+command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'reverse_filter.py'), args, config)
+
+###################################################################
+#
+# arcs gapfill
+#
+###################################################################
+args = '-s %s -d %s -K %d -O %d -C %s -l %s -I %s -P %s' % (os.path.join(config['workspace'], 'scaffold_parameter_0'), config['workspace'], config['kmer_size'], config['kmer_size'] - 10, os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_last'), os.path.join(config['workspace'], 'condensed_de_bruijn_graph_before_trimming.data'), os.path.join(config['workspace'], 'scaf.after.pair'))
+command_run(ARCS_CMD, 'gapfill', args, config)
 '''
+#i += 1
+
+###################################################################
+#
+# python giveContigsNumber.py
+#
+###################################################################
+args = '%s %s %s' % (os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'contigs.fasta'), os.path.join(config['workspace'], 'contig_len'))
+command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'giveContigsNumber.py'), args, config)
+
 ###################################################################
 #
 # run reversePacBioRead.py 
 #
 ###################################################################
-args = '%s %s' % (config['pb'], os.path.join(config['workspace'], 'rePacbioRead.fasta'));
-command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'SPAReversePacBioRead.py'), args, config)
-
-args = '-in %s -dbtype nucl' % (os.path.join(config['workspace'], 'rePacbioRead.fasta'));
-command_run('','/home/liyanbo/bin/makeblastdb', args, config)
-
-#/home/liyanbo/bin/makeblastdb -in ecoli_1.fasta -dbtype nucl
-
-#/home/liyanbo/bin/blastn -db ecoli_ref.fa -query 2N.fa
+args = '%s %s' % (config['pb'], os.path.join(config['workspace'], 're_pacbio_read.fasta'));
+command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'reversePacBioRead.py'), args, config)
 
 ###################################################################
 #
 # run blasr 
 #
 ###################################################################
-args = '-outfmt 6 -db %s -query %s -out %s' % (os.path.join(config['workspace'], 'rePacbioRead.fasta'), os.path.join(config['workspace'], 'reContigs.fasta'), os.path.join(config['workspace'], 'blastnResult'))
-command_run('','/home/liyanbo/bin/blastn', args, config)
-'''
-i=0
+
+args = '%s %s -out %s -m 0 -nproc %d' % (os.path.join(config['workspace'], 're_pacbio_read.fasta'), os.path.join(config['workspace'], 'contigs.fasta'), os.path.join(config['workspace'], 'blasr_result_0'), 8)
+command_run('', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'blasr'), args, config)
+
 ###################################################################
 #
 # python tranBlasr2LPAndGraph.py
 #
 ###################################################################
-args = '%s %s %s %s %s %s %s %s' % (os.path.join(config['workspace'], 'contig_len'), os.path.join(config['workspace'], 'component_%d' % i), os.path.join(config['workspace'], 'blastnResult'), os.path.join(config['workspace'], 'contig_arc_graph_after_remove_ambigous_arcs_%d' % i), os.path.join(config['workspace'], 'position_lp_%d.math' % i), os.path.join(config['workspace'], 'edge_cluster_len_%d' % i), os.path.join(config['workspace'], 'component_number_%d' % i), os.path.join(config['workspace'], 'subgraph'))
 
-command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'SPATranBlasr2LPAndGraph.py'), args, config)
+i = 0
+#print i
+args = '%s %s %s %s %s %s %s' % (os.path.join(config['workspace'], 'contig_len'), os.path.join(config['workspace'], 'component_%d' % i), os.path.join(config['workspace'], 'blasr_result_0'), os.path.join(config['workspace'], 'contig_arc_graph_after_remove_ambigous_arcs_%d' % i), os.path.join(config['workspace'], 'position_lp_%d.math' % i), os.path.join(config['workspace'], 'edge_cluster_len_%d' % i), os.path.join(config['workspace'], 'scaffold_parameter_%d' % (i)))
+command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'tranBlasr2LPAndGraph.py'), args, config)
 
-'''
 ###################################################################
 #
 # arcs solveLP
 #
 ###################################################################
-args = '-s %s -i %s -o %s' % (os.path.join(config['workspace'], 'component_number_%d' % (i)), os.path.join(config['workspace'], 'position_lp_%d.math' % (i)), os.path.join(config['workspace'], 'edge_cluster_pos_%d' % (i)))
+args = '-s %s -i %s -o %s' % (os.path.join(config['workspace'], 'scaffold_parameter_%d' % (i)), os.path.join(config['workspace'], 'position_lp_%d.math' % (i)), os.path.join(config['workspace'], 'edge_cluster_pos_%d' % (i)))
 command_run(ARCS_CMD, 'solveLP', args, config)
 
+#i=0
 ###################################################################
 #
 # arcs remove_repeats
@@ -255,21 +322,24 @@ command_run(ARCS_CMD, 'remove_repeats', args, config)
 # python reverse_filter.py
 #
 ###################################################################
-args = '%s %s %s' % (config['workspace'], os.path.join(config['workspace'], 'contigs.fasta'), os.path.join(config['workspace'], 'component_%d' % (i+1)))
-command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'SPAReverse_filter.py'), args, config)
-
+args = '%s %s %s' % (config['workspace'], os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_%d' % (i+1)))
+command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'reverse_filter.py'), args, config)
 
 ###################################################################
 #
 # arcs gapfill
 #
 ###################################################################
-args = '-s %s -d %s -K %d -O %d -C %s -l %s -I %s -P %s' % (os.path.join(config['workspace'], 'scaffold_parameter_0'), config['workspace'], config['kmer_size'], config['kmer_size'] - 10, os.path.join(config['workspace'], 'contigs.fa'), os.path.join(config['workspace'], 'component_last'), os.path.join(config['workspace'], 'condensed_de_bruijn_graph_before_trimming.data'), os.path.join(config['workspace'], 'scaf.after.3rd'))
+
+args = '-s %s -d %s -K %d -O %d -C %s -l %s -I %s' % (os.path.join(config['workspace'], 'scaffold_parameter'), config['workspace'], config['kmer_size'], config['kmer_size'] - 10, os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_last'), os.path.join(config['workspace'], 'condensed_de_bruijn_graph_before_trimming.data'))
+command_run(ARCS_CMD, 'gapfill', args, config)
+'''
+args = '-s %s -d %s -K %d -O %d -C %s -l %s -I %s -P %s' % (os.path.join(config['workspace'], 'scaffold_parameter'), config['workspace'], config['kmer_size'], config['kmer_size'] - 10, os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_last'), os.path.join(config['workspace'], 'condensed_de_bruijn_graph_before_trimming.data'), os.path.join(config['workspace'], 'scaf.after.3rd'))
 command_run(ARCS_CMD, 'gapfill', args, config)
 '''
 end = datetime.now()
 print 'total running time is %d seconds' % ((end - start).seconds)
-#Usage: ./giveContigsNumber.py condensed_de_bruijn_graph_after_trimming.data contig.
+#Usage: ./giveContigsNumber.py condensed_de_bruijn_graph_after_trimming.data contig.fasta
 #Usage: ./tranBlasr2LPAndGraph.py edge_cluster_len_1 component_n blasr.out contig_arc_graph_after_remove_ambigous_arcs_n position_lp_n.math
 #blasr_map_cmd = "./blasr " + workspace + "/pacbio_read.fasta " + workspace + "/contig.fasta -out " + workspace + "/blasr_result_t0 -m 0 -nproc " + str(cpu_num)
 #./reversePacBioRead.py arcs23/pacbio_read_test_fasta aa
