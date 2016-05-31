@@ -160,6 +160,11 @@ private:
         }
         std::pair<size_t, size_t> pos(-1, -1);
         int mx = -1;
+        //judge which pair contig dose this pair read belong to
+        //std::get<0>(it->sceong): left most pos of the left contig
+        //std::get<1>(it->sceong): right most pos of the left contig
+        //std::get<2>(it->sceong): pair kmer number
+        //all the pair kmers fall into this pair contig or pair kmer number >= 0.8 * (length of mapped left contig) 
         for(auto it = find_component.begin(); it != find_component.end(); ++it) {
             if(std::get<2>(it->second) > mx && 
                     ( std::get<2>(it->second) > read1.length() - _K || 
@@ -292,9 +297,8 @@ int _Scaffolding_run_(size_t L, const Properties& options, const Arguments& argu
     // parameters
     {
         boost::filesystem::ofstream stream(workdir / boost::filesystem::path(
-                    //boost::str(boost::format("scaffold_parameter_%d") % ITERATION)
-            boost::str(boost::format("scaffold_parameter"))
-                    ));
+                    boost::str(boost::format("scaffold_parameter_%d") % ITERATION)
+            ));
         stream << boost::format("K=%d") % K << std::endl;
         stream << boost::format("EDGE_CLUSTER_NUM=%d") % components.size() << std::endl;
         stream << boost::format("GENOME_LEN=%d") % g.GENOME_LEN << std::endl;

@@ -14,6 +14,7 @@ def configfile_parse(f, config):
             'PAIR_KMER_CUTOFF': int, 
             'PAIR_READS_CUTOFF': int, 
             'EDGE_LENGTH_CUTOFF': int, 
+            'READ_LENGTH_CUTOFF': int,
             'q1': str, 
             'q2': str
             }
@@ -27,7 +28,10 @@ def configfile_parse(f, config):
             if options.has_key(key):
                 library_list.append(options);
                 options = {}
-            options[key] = transform[key](val)
+            if key == 'READ_LENGTH_CUTOFF':
+                config[key] = transform[key](val)
+            else:
+                options[key] = transform[key](val)
     if len(options) > 0:
         library_list.append(options)
 
@@ -175,7 +179,7 @@ start = datetime.now()
 # arcs preprocess
 #
 ###################################################################
-args = '-K %d -o %s -e -1' % (config['kmer_size'], os.path.join(config['workspace'], 'kmers.arff'))
+args = '-K %d -o %s -e %d -t 1 -F' % (config['kmer_size'], os.path.join(config['workspace'], 'kmers.arff'), config['READ_LENGTH_CUTOFF'])
 if config['kmer_filter'] and config['kmer_size'] < 33:
     args = '%s -E' % (args)
 args = '%s %s %s' % (args, config['library_list'][0]['q1'], config['library_list'][0]['q2'])
@@ -232,10 +236,41 @@ for i, library in enumerate(config['library_list']):
 
 ###################################################################
 #
+# call back repeate 
+#
+###################################################################
+args = '%s %s %s %d' % (os.path.join(config['workspace'], 'component_0'), os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], ('component_%d' % (i+1))), 10)
+command_run('python3', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'get_repeate_com.py'), args, config)
+#python3 /home/wangbing/12_15_result/script/get_repeate_com.py component_0 cdbg_copy_number.fa component_2 6
+###################################################################
+#
+# arcs scaffold
+#
+###################################################################
+args = '-d %s -K %d -C %s -f %s -e %d -1 %s -2 %s -L %d -P %f -i %d -r %d -R %d -p %d' % (config['workspace'], config['kmer_size'], os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_%d' % (i+1)), library['EDGE_LENGTH_CUTOFF'], library['q1'], library['q2'], library['INSERT_SIZE'], library['LINK_QUALITY_PERCENT'], i+1, library['PAIR_KMER_CUTOFF'], library['PAIR_READS_CUTOFF'], config['cpu_num'])
+command_run(ARCS_CMD, 'scaffold', args, config)
+
+###################################################################
+#
+# arcs solveLP
+#
+###################################################################
+args = '-s %s -i %s -o %s' % (os.path.join(config['workspace'], 'scaffold_parameter_%d' % (i+1)), os.path.join(config['workspace'], 'position_lp_%d.math' % (i+1)), os.path.join(config['workspace'], 'edge_cluster_pos_%d' % (i+1)))
+command_run(ARCS_CMD, 'solveLP', args, config)
+
+###################################################################
+#
+# arcs remove_repeats
+#
+###################################################################
+args = '-d %s -K %d -O %d -i %d' % (config['workspace'], config['kmer_size'], config['max_overlap'], i+1)
+command_run(ARCS_CMD, 'remove_repeats', args, config)
+###################################################################
+#
 # python reverse_filter.py
 #
 ###################################################################
-args = '%s %s %s' % (config['workspace'], os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_%d' % len(config['library_list'])))
+args = '%s %s %s' % (config['workspace'], os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_%d' % (len(config['library_list'])+1)))
 command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'reverse_filter.py'), args, config)
 
 ###################################################################
@@ -243,7 +278,8 @@ command_run('python', os.path.join(os.path.abspath(os.path.dirname(__file__)), '
 # arcs gapfill
 #
 ###################################################################
-args = '-s %s -d %s -K %d -O %d -C %s -l %s -I %s' % (os.path.join(config['workspace'], 'scaffold_parameter_0'), config['workspace'], config['kmer_size'], config['kmer_size'] - 10, os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_last'), os.path.join(config['workspace'], 'condensed_de_bruijn_graph_before_trimming.data'))
+#args = '-s %s -d %s -K %d -O %d -C %s -l %s -I %s' % (os.path.join(config['workspace'], 'scaffold_parameter_0'), config['workspace'], config['kmer_size'], config['kmer_size'] - 10, os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_last'), os.path.join(config['workspace'], 'condensed_de_bruijn_graph_before_trimming.data'))
+args = '-s %s -d %s -K %d -O %d -C %s -l %s -I %s' % (os.path.join(config['workspace'], 'scaffold_parameter_0'), config['workspace'], config['kmer_size'], 10, os.path.join(config['workspace'], 'cdbg_copy_number.fa'), os.path.join(config['workspace'], 'component_last'), os.path.join(config['workspace'], 'condensed_de_bruijn_graph_before_trimming.data'))
 command_run(ARCS_CMD, 'gapfill', args, config)
 
 end = datetime.now()
